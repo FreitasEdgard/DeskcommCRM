@@ -21,7 +21,7 @@ import { entraPorPacote, type ToolBundle, type ToolRisk } from "./pacotes";
  * exista em UM lugar — o mesmo teto que a tela mostra é o que o servidor
  * recusa.
  *
- * ═══ Por que 25, e não mais os 20 de antes ══════════════════════════════════
+ * ═══ Histórico do limite anterior: 25, antes eram 20 ════════════════════════
  *
  * O dono do produto abriu "O que o agente pode fazer" na v1.7.0 e leu
  * "20 de 20 capacidades ligadas. Limite atingido." As capacidades de agenda
@@ -43,17 +43,19 @@ import { entraPorPacote, type ToolBundle, type ToolRisk } from "./pacotes";
  *    default de hoje NENHUM segundo pacote cabia: evoluir exigia 21, reter 22,
  *    escalar 28, atender 30, organizar 32.
  *
- * 25 é o MENOR passo que resolve: dá a um agente cheio as 5 vagas da família de
- * agenda e mantém `vender` inteiro com folga real. Não é número redondo
- * escolhido no olho — subir mais seria apostar contra um argumento que continua
- * de pé só porque ninguém o mediu.
+ * 25 era o menor passo para aquele caso: dava a um agente cheio as 5 vagas da
+ * família de agenda e mantinha `vender` inteiro com folga real. A instalação
+ * local usa 70 para permitir o catálogo atual; a qualidade com tantas
+ * ferramentas deve ser medida antes de atender clientes reais.
  *
  * ⚠️ O QUE FALTA, e é honesto dizer: não há instrumento para observar a
  * degradação que a heurística prevê. O lugar de observá-la é
  * `app/api/v1/ai/agents/[id]/tool-usage` e o log de invocação do run, com
  * "ferramenta errada escolhida" como sinal. Quem for subir de novo mede antes.
  */
-export const TETO_TOOLS_POR_AGENTE = 25;
+// Ajuste local: permite selecionar todo o catálogo atual, mantendo a confirmação
+// individual das capacidades críticas e os demais limites de execução do agente.
+export const TETO_TOOLS_POR_AGENTE = 70;
 
 /** O mínimo que a regra precisa saber de uma capacidade. */
 export interface CapacidadeSelecionavel {
