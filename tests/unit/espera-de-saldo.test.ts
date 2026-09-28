@@ -32,6 +32,7 @@ import type { JobRow } from "@/lib/agent-engine/queue/queue";
 const ANTHROPIC =
   "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.";
 const OPENAI = "You exceeded your current quota, please check your plan and billing details.";
+const GOOGLE_VIA_REQUESTY = `${OPENAI} Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_paid_tier_3_input_token_count, model: gemma-4-31b`;
 const AGORA = Date.parse("2026-09-24T12:48:49Z");
 const criadoHa = (ms: number) => ({ created_at: new Date(AGORA - ms) });
 
@@ -39,6 +40,7 @@ describe("qual erro é falta de saldo", () => {
   it("a frase da Anthropic (400) e as da OpenAI (429) — com o provedor certo", () => {
     expect(provedorSemSaldo(Object.assign(new Error(ANTHROPIC), { statusCode: 400 }))).toBe("anthropic");
     expect(provedorSemSaldo(new Error(OPENAI))).toBe("openai");
+    expect(provedorSemSaldo(new Error(GOOGLE_VIA_REQUESTY))).toBe("google");
     expect(provedorSemSaldo(new Error('429 {"error":{"code":"insufficient_quota"}}'))).toBe("openai");
   });
 
@@ -156,6 +158,15 @@ describe("o que vai para o banco", () => {
       null,
       null,
     ]);
+  });
+
+  it("cota do Google via roteador não aponta a credencial OpenAI nem a Google direta", async () => {
+    const { db, consultas } = bancoFalso([[/from organizations/, [{ locale: null }]]]);
+    await avisarFaltaDeSaldo(db, "org-1", new Error(GOOGLE_VIA_REQUESTY));
+    expect(consultas.some(({ sql }) => sql.includes("from ai_provider_credentials"))).toBe(false);
+    const insert = consultas.find(({ sql }) => sql.includes("insert into agent_inbox_items"));
+    expect(insert?.params[4]).toMatch(/Provedor: google$/);
+    expect(insert?.params.slice(5, 7)).toEqual([null, null]);
   });
 
   it("encerrar fecha o aviso aberto da organização pelo título no idioma dela", async () => {

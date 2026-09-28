@@ -28,7 +28,10 @@ const ORG = "11111111-1111-4111-8111-111111111111";
 const CANAL = "22222222-2222-4222-8222-222222222222";
 
 /** Cliente que responde por TABELA; toda cadeia (`select`, `eq`, `in`…) devolve a si mesma. */
-function cliente(porTabela: Record<string, unknown>) {
+function cliente(
+  porTabela: Record<string, unknown>,
+  onCall?: (tabela: string, metodo: string, args: unknown[]) => void,
+) {
   return {
     auth: { getUser: async () => ({ data: { user: { id: "u" } }, error: null }) },
     from: (tabela: string) => {
@@ -41,7 +44,10 @@ function cliente(porTabela: Record<string, unknown>) {
               ? (ok: (v: unknown) => unknown) => Promise.resolve(resposta).then(ok)
               : chave === "maybeSingle"
                 ? async () => resposta
-                : () => cadeia,
+                : (...args: unknown[]) => {
+                    onCall?.(tabela, String(chave), args);
+                    return cadeia;
+                  },
         },
       );
       return cadeia;
@@ -60,6 +66,52 @@ beforeEach(() => {
 });
 
 describe("o fuso da organização chega à tela", () => {
+  it("antecipar turno adiado ao abrir a janela para o dia inteiro", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-28T03:00:00.000Z")); // meia-noite em São Paulo
+    try {
+      const calls: Array<[string, string, unknown[]]> = [];
+      vi.mocked(createAdminClient).mockReturnValue(
+        cliente(
+          {
+            channel_sessions: { id: CANAL },
+            channel_knobs: { window_start_hour: 7, window_end_hour: 22, timezone: null },
+            organizations: { timezone: "America/Sao_Paulo" },
+            job_queue: null,
+          },
+          (table, method, args) => calls.push([table, method, args]),
+        ),
+      );
+      const res = await putPacing(
+        new NextRequest("http://localhost/api/v1/ai/pacing", {
+          method: "PUT",
+          body: JSON.stringify({
+            channel_session_id: CANAL,
+            window_start_hour: 0,
+            window_end_hour: 24,
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(calls).toContainEqual([
+        "job_queue",
+        "contains",
+        ["payload", { channel_session_id: CANAL }],
+      ]);
+      expect(calls).toContainEqual(["job_queue", "eq", ["organization_id", ORG]]);
+      expect(calls).toContainEqual([
+        "job_queue",
+        "like",
+        ["last_error", "fora da janela anti-ban de envio%"],
+      ]);
+      expect(calls.some(([table, method]) => table === "job_queue" && method === "update")).toBe(
+        true,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("Conexões › Proteção de envio: o efetivo de um número sem knobs é o da organização", async () => {
     vi.mocked(createAdminClient).mockReturnValue(
       cliente({
@@ -89,7 +141,9 @@ describe("o fuso da organização chega à tela", () => {
         body: JSON.stringify({ channel_session_id: CANAL, window_start_hour: 8 }),
       }),
     );
-    const corpo = (await res.json()) as { data: { effective: { timezone: string; windowStartHour: number } } };
+    const corpo = (await res.json()) as {
+      data: { effective: { timezone: string; windowStartHour: number } };
+    };
     expect(corpo.data.effective).toMatchObject({ timezone: "Europe/Lisbon", windowStartHour: 8 });
   });
 
@@ -102,9 +156,12 @@ describe("o fuso da organização chega à tela", () => {
         organizations: { timezone: "Europe/Lisbon" },
       }),
     );
-    const res = await getRetention(new NextRequest("http://localhost/api/v1/conversations/c/retention"), {
-      params: Promise.resolve({ id: "c" }),
-    });
+    const res = await getRetention(
+      new NextRequest("http://localhost/api/v1/conversations/c/retention"),
+      {
+        params: Promise.resolve({ id: "c" }),
+      },
+    );
     const corpo = (await res.json()) as { data: { context: { timezone: string } } };
     expect(corpo.data.context.timezone).toBe("Europe/Lisbon");
   });

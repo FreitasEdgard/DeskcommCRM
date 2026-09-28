@@ -4809,6 +4809,9 @@ export const DICIONARIO: Traducoes = {
   "O assistente só envia mensagens dentro desta janela. Fora dela, a resposta fica agendada para a próxima abertura — você vê o motivo na conversa.": {
     es: "El asistente solo envía mensajes dentro de esta ventana. Fuera de ella, la respuesta queda programada para cuando se abra de nuevo, y el motivo aparece en la conversación.",
   },
+  "O assistente só envia mensagens dentro desta janela. Use 0h até 24h para permitir envios a qualquer hora. Fora dela, a resposta fica agendada para a próxima abertura; ao ampliar a janela, as respostas pendentes são antecipadas.": {
+    es: "El asistente solo envía mensajes dentro de esta ventana. Usa de 0h a 24h para permitir envíos a cualquier hora. Fuera de ella, la respuesta queda programada para la próxima apertura; al ampliar la ventana, las respuestas pendientes se adelantan.",
+  },
   "Enviar aos domingos": { es: "Enviar los domingos" },
   "Ligado por padrão: quem escreve no domingo espera resposta no domingo. Desligue se você faz prospecção ativa e prefere não incomodar no fim de semana.": {
     es: "Activado por defecto: quien escribe un domingo espera respuesta el domingo. Desactívalo si haces prospección activa y prefieres no molestar el fin de semana.",

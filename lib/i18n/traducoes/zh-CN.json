@@ -2218,6 +2218,7 @@
   "h até": "时 至",
   "Hora de fim da janela": "窗口结束时间",
   "O assistente só envia mensagens dentro desta janela. Fora dela, a resposta fica agendada para a próxima abertura — você vê o motivo na conversa.": "助手仅在此时间窗口内发送消息。窗口外，回复会安排到下次窗口开启时发送——你可以在会话中看到原因。",
+  "O assistente só envia mensagens dentro desta janela. Use 0h até 24h para permitir envios a qualquer hora. Fora dela, a resposta fica agendada para a próxima abertura; ao ampliar a janela, as respostas pendentes são antecipadas.": "助手只会在此时间窗口内发送消息。设置为0时至24时可全天发送。窗口外的回复会安排在下次开放时发送；扩大时间窗口后，待发送的回复会提前处理。",
   "Enviar aos domingos": "周日发送",
   "Ligado por padrão: quem escreve no domingo espera resposta no domingo. Desligue se você faz prospecção ativa e prefere não incomodar no fim de semana.": "默认开启：周日发消息的人期望周日收到回复。如果你做主动拓客且不想在周末打扰对方，请关闭。",
   "Ritmo entre envios (segundos)": "发送间隔节奏（秒）",

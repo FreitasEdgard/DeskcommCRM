@@ -17,6 +17,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { PROVIDERS_DE_MENSAGEM } from "@/lib/channels/capabilities";
+import { janelaDeEnvioAberta } from "@/lib/agent-engine/pacing/engine";
 import {
   pacingKnobsUpdateSchema,
   knobsView,
@@ -40,7 +41,11 @@ async function lerFusoDaOrganizacao(
   admin: ReturnType<typeof createAdminClient>,
   orgId: string,
 ): Promise<string | null> {
-  const { data } = await admin.from("organizations").select("timezone").eq("id", orgId).maybeSingle();
+  const { data } = await admin
+    .from("organizations")
+    .select("timezone")
+    .eq("id", orgId)
+    .maybeSingle();
   return (data as { timezone?: string | null } | null)?.timezone ?? null;
 }
 
@@ -52,23 +57,24 @@ export async function GET(): Promise<Response> {
   const { org } = authz;
 
   const admin = createAdminClient();
-  const [{ data: sessions, error: sErr }, { data: knobs, error: kErr }, fusoDaOrg] = await Promise.all([
-    admin
-      .from("channel_sessions")
-      .select("id, waha_session_name, display_name, phone_number, status, daily_message_limit")
-      .eq("organization_id", org.orgId)
-      // Canal arquivado foi excluído pelo usuário: não volta como opção aqui.
-      .is("archived_at", null)
-      // Ritmo de envio é regra de canal de MENSAGEM. A linha de chamada de voz
-      // (spec 18) não dispara nada e não tem intervalo a calibrar.
-      .in("provider", [...PROVIDERS_DE_MENSAGEM])
-      .order("created_at", { ascending: true }),
-    admin
-      .from("channel_knobs")
-      .select(`channel_session_id, ${KNOB_COLUMNS}`)
-      .eq("organization_id", org.orgId),
-    lerFusoDaOrganizacao(admin, org.orgId),
-  ]);
+  const [{ data: sessions, error: sErr }, { data: knobs, error: kErr }, fusoDaOrg] =
+    await Promise.all([
+      admin
+        .from("channel_sessions")
+        .select("id, waha_session_name, display_name, phone_number, status, daily_message_limit")
+        .eq("organization_id", org.orgId)
+        // Canal arquivado foi excluído pelo usuário: não volta como opção aqui.
+        .is("archived_at", null)
+        // Ritmo de envio é regra de canal de MENSAGEM. A linha de chamada de voz
+        // (spec 18) não dispara nada e não tem intervalo a calibrar.
+        .in("provider", [...PROVIDERS_DE_MENSAGEM])
+        .order("created_at", { ascending: true }),
+      admin
+        .from("channel_knobs")
+        .select(`channel_session_id, ${KNOB_COLUMNS}`)
+        .eq("organization_id", org.orgId),
+      lerFusoDaOrganizacao(admin, org.orgId),
+    ]);
   if (sErr || kErr) {
     return fail("internal_error", t("Falha ao carregar conexões/knobs."), 500, { requestId });
   }
@@ -196,6 +202,36 @@ export async function PUT(req: NextRequest): Promise<Response> {
         requestId,
         details: { motivo: upErr.message },
       });
+    }
+  }
+
+  // Uma conversa recebida fora da janela já pode ter um turno pendente para a
+  // próxima abertura. Ao ampliar a janela, mensagens novas são agrupadas nesse
+  // mesmo turno; sem antecipá-lo, a tela diz 0h–24h mas o bot espera até 7h.
+  // Só acordamos turnos adiados por ESTA regra, nesta conexão e organização.
+  if (
+    (camposDiretos.window_start_hour !== undefined ||
+      camposDiretos.window_end_hour !== undefined ||
+      camposDiretos.timezone !== undefined ||
+      camposDiretos.allow_sunday !== undefined) &&
+    janelaDeEnvioAberta(new Date(), eff)
+  ) {
+    const { error: wakeErr } = await admin
+      .from("job_queue")
+      .update({ run_after: new Date().toISOString(), last_error: null })
+      .eq("organization_id", org.orgId)
+      .eq("kind", "inbound_turn")
+      .eq("status", "pending")
+      .contains("payload", { channel_session_id })
+      .like("last_error", "fora da janela anti-ban de envio%")
+      .gt("run_after", new Date().toISOString());
+    if (wakeErr) {
+      return fail(
+        "internal_error",
+        t("Horário salvo, mas não foi possível antecipar as respostas pendentes."),
+        500,
+        { requestId, details: { motivo: wakeErr.message } },
+      );
     }
   }
 

@@ -63,7 +63,11 @@ const CORPO_DO_AVISO =
  * pedido malformado) e a OpenAI devolve 429 (o mesmo de um limite de ritmo, que
  * passa sozinho e JÁ tem a espera curta da fila).
  */
-const FRASES_DE_SEM_SALDO: ReadonlyArray<{ padrao: RegExp; provedor: 'anthropic' | 'openai' }> = [
+const METRICA_GOOGLE = /generativelanguage\.googleapis\.com\/generate_content_/i;
+const FRASES_DE_SEM_SALDO: ReadonlyArray<{ padrao: RegExp; provedor: 'anthropic' | 'openai' | 'google' }> = [
+  // O gateway pode devolver a frase genérica da OpenAI junto da métrica do
+  // Google. A métrica identifica o provedor real do modelo, mesmo via Requesty.
+  { padrao: METRICA_GOOGLE, provedor: 'google' },
   { padrao: /credit balance is too low/i, provedor: 'anthropic' },
   { padrao: /insufficient_quota|exceeded your current quota/i, provedor: 'openai' },
 ];
@@ -80,8 +84,12 @@ function mensagens(err: unknown): string[] {
 }
 
 /** De qual provedor é a falta de saldo — `null` quando o erro é outro. */
-export function provedorSemSaldo(err: unknown): 'anthropic' | 'openai' | null {
-  for (const texto of mensagens(err)) {
+export function provedorSemSaldo(err: unknown): 'anthropic' | 'openai' | 'google' | null {
+  const textos = mensagens(err);
+  // Antes de casar a frase genérica "exceeded your current quota", procure a
+  // assinatura do Google em toda a cadeia de causas do SDK.
+  if (textos.some((texto) => METRICA_GOOGLE.test(texto))) return 'google';
+  for (const texto of textos) {
     for (const f of FRASES_DE_SEM_SALDO) if (f.padrao.test(texto)) return f.provedor;
   }
   return null;
@@ -173,13 +181,17 @@ export async function avisarFaltaDeSaldo(
 ): Promise<void> {
   const provedor = provedorSemSaldo(err);
   const idioma = await idiomaDaOrganizacao(db, orgId);
-  const { rows } = await db.query<{ id: string }>(
-    `select id from ai_provider_credentials
-      where organization_id = $1 and provider = $2 and is_active
-      order by updated_at desc
-      limit 1`,
-    [orgId, provedor],
-  );
+  // A chamada pode chegar ao Google por um roteador (Requesty/OpenRouter).
+  // Não apontar a credencial Google direta quando não sabemos qual foi usada.
+  const { rows } = provedor === 'google'
+    ? { rows: [] as Array<{ id: string }> }
+    : await db.query<{ id: string }>(
+        `select id from ai_provider_credentials
+          where organization_id = $1 and provider = $2 and is_active
+          order by updated_at desc
+          limit 1`,
+        [orgId, provedor],
+      );
   const credencial = rows[0]?.id;
   await insertInboxItem(
     db,

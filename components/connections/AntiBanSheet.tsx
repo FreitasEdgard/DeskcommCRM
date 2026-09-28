@@ -253,7 +253,7 @@ export function AntiBanSheet({ item, canWrite, onClose }: Props) {
             </div>
             <p className="text-xs text-muted-foreground">
               {t(
-                "O assistente só envia mensagens dentro desta janela. Fora dela, a resposta fica agendada para a próxima abertura — você vê o motivo na conversa.",
+                "O assistente só envia mensagens dentro desta janela. Use 0h até 24h para permitir envios a qualquer hora. Fora dela, a resposta fica agendada para a próxima abertura; ao ampliar a janela, as respostas pendentes são antecipadas.",
               )}
             </p>
           </fieldset>
